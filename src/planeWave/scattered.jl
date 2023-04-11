@@ -372,3 +372,133 @@ function expansion(sphere::Sphere, excitation::PlaneWave, quantity::Field, r, pl
 
     return Nn_r, Nn_ϑ, Nn_ϕ, Mn_ϑ, Mn_ϕ
 end
+
+"""
+Return the values of Riccati-Hankel of first kind, its derivate, Riccati-Hankel
+of second kind, its derivate
+"""
+function hankel_dhankel(ka, n, T)
+    
+    s = sqrt(π / 2 / ka)
+    Ĥ₂  = ka * s * hankelh2(n + T(0.5), ka)  # Riccati-Hankel function
+    Ĥ₂2 = ka * s * hankelh2(n - T(0.5), ka)  # for derivate needed
+    dĤ₂ = (Ĥ₂2 - n / ka * Ĥ₂)    # derivative Riccati-Hankel function
+
+    Ĥ₁  = ka * s * hankelh1(n + T(0.5), ka)  # Riccati-Hankel function
+    Ĥ₁2 = ka * s * hankelh1(n - T(0.5), ka)  # for derivate needed
+    dĤ₁ = (Ĥ₁2 - n / ka * Ĥ₁)    # derivative Riccati-Hankel function
+    return Ĥ₁, dĤ₁, Ĥ₂, dĤ₂
+end
+
+"""
+Compute the expression - Jin 7.4.83
+"""
+
+function R̂(sphere::LayeredSphere, ex, i, n, param)
+    f = ex.frequency
+    T = typeof(f)
+    if i==length(sphere.radii)
+        ϵ₂ = sphere.embedding.ε
+        μ₂ = sphere.embedding.μ
+    else
+        ϵ₂ = sphere.filling[i+1].ε
+        μ₂ = sphere.filling[i+1].μ
+    end
+    
+    μ₁ = sphere.filling[i].μ
+    ϵ₁ = sphere.filling[i].ε
+
+    k₁ = 2π*f*sqrt(μ₁*ϵ₁)
+    ka = k₁*sphere.radii[i]
+
+    Ĥ₁, dĤ₁, Ĥ₂, dĤ₂ = hankel_dhankel(ka, n, T)
+
+    r = ratioD_C(sphere, ex, i, n, param)
+    if param=='H'
+        return sqrt((μ₂*ϵ₁)/(ϵ₂*μ₁))*(Ĥ₁ + r*Ĥ₂)/(dĤ₁ + r*dĤ₂)   #Jin (7.4.83)
+    elseif param=='E'
+        return sqrt((ϵ₂*μ₁)/(μ₂*ϵ₁))*(Ĥ₁ + r*Ĥ₂)/(dĤ₁ + r*dĤ₂)   #jin (7.4.84)
+    else
+        return "error"
+    end
+end
+
+"""
+Compute the expression - Jin 7.4.84
+"""
+
+function ratioD_C(sphere::LayeredSphere, ex, i, n, param)
+    if i==1
+        return 1.0
+        #= if homogenous
+            return 1.0
+        elseif PECSphere
+            return (...)/(...)
+        else
+            return error
+        end =#
+    else
+        R = R̂(sphere, ex, i-1, n, param)
+        f = ex.frequency
+        T = typeof(f)
+
+        ε₁ = sphere.filling[i].ε
+        μ₁ = sphere.filling[i].μ
+
+        k₁ = 2π*f*sqrt(μ₁*ε₁)
+
+        ka = k₁*sphere.radii[i-1]
+
+        Ĥ₁, dĤ₁, Ĥ₂, dĤ₂ = hankel_dhankel(ka, n, T)
+
+        return -(Ĥ₁-R*dĤ₁)/(Ĥ₂-R*dĤ₂) #Jin (7.4.85) & (7.4.86)
+    end
+end
+
+"""
+Scattered field coefficients for scattering of a planewave by a layered
+dielectric sphere
+"""
+
+function scatterCoeff(sphere::LayeredSphere, excitation, n)
+    f = excitation.frequency
+    T = typeof(f)
+
+    m = length(sphere.radii)
+
+    ε = sphere.embedding.ε
+    μ = sphere.embedding.μ
+
+    εm = sphere.filling[m].ε
+    μm = sphere.filling[m].μ
+
+    c = 1 / sqrt(ε * μ)
+    cm = 1 / sqrt(εm * μm)
+
+
+    k = 2π * f / c
+    km = 2π * f / cm
+
+    k₂a = k * sphere.radii[m]
+    s₂ = sqrt(π / 2 / k₂a)
+
+    Ĵ₂  = k₂a * s₂ * besselj(n + T(0.5), k₂a)   # Riccati-Bessel function
+    Ĥ₂  = k₂a * s₂ * hankelh2(n + T(0.5), k₂a)  # Riccati-Hankel function
+    Ĵ₂2 = k₂a * s₂ * besselj(n - T(0.5), k₂a)   # for derivate needed
+    Ĥ₂2 = k₂a * s₂ * hankelh2(n - T(0.5), k₂a)  # for derivate needed
+
+    # Use recurrence relationship
+    dĴ₂ = (Ĵ₂2 - n / k₂a * Ĵ₂)    # derivative Riccati-Bessel function
+    dĤ₂ = (Ĥ₂2 - n / k₂a * Ĥ₂)    # derivative Riccati-Hankel function
+
+    R_H = R̂(sphere, excitation, m, n,'H')
+    R_E = R̂(sphere, excitation, m, n,'E')
+
+    pF = im^(-T(n)) * (2 * n + 1) / (n * (n + 1))
+
+    aₙ = -pF * (Ĵ₂ - R_H * dĴ₂) / (Ĥ₂ - R_H * dĤ₂)     # Jin (7.4.92)
+    bₙ = -pF * (Ĵ₂ - R_E * dĴ₂) / (Ĥ₂ - R_E * dĤ₂)     # Jin (7.4.93)
+    cₙ = nothing
+    dₙ = nothing
+    return aₙ, bₙ, cₙ, dₙ
+end
