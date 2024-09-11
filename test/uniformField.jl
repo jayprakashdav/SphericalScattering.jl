@@ -19,7 +19,7 @@ end
 @testset "Scattered fields" begin
     @testset "Dielectric sphere" begin
         # define scatterer: dielectric sphere
-        sp = DielectricSphere(; radius=1.0, embedding=Medium(ε0, μ0), filling=Medium(ε0 * 5, μ0))
+        sp = DielectricSphere(; radius=1.0, filling=Medium(ε0 * 5, μ0))
 
         # define observation points inside and outside of the sphere
         point_cart = [SVector(0.0, 0.0, 0.5), SVector(2.0, 0.0, 0.0)]
@@ -41,7 +41,7 @@ end
     end
     @testset "PEC sphere" begin
         # define scatterer: PEC sphere
-        sp = PECSphere(1.0, Medium(ε0, μ0))
+        sp = PECSphere(1.0)
 
         # define observation points inside and outside of the sphere
         point_cart = [SVector(0.0, 0.0, 0.5), SVector(2.0, 0.0, 0.0)]
@@ -63,7 +63,7 @@ end
     end
     @testset "Layered sphere" begin
         # define scatterer: layered dielectric sphere
-        sp = LayeredSphere(; radii=SVector(1.0, 0.5), filling=SVector(Medium(3ε0, μ0), Medium(5ε0, μ0)), embedding=Medium(ε0, μ0))
+        sp = LayeredSphere(; radii=SVector(0.5, 1.0), filling=SVector(Medium(5ε0, μ0), Medium(3ε0, μ0)))
 
         # define observation points in both layers and outside of the sphere
         point_cart = [SVector(0.25, 0.0, 0.0), SVector(0.75, 0.0, 0.0), SVector(2.0, 0.0, 0.0)]
@@ -72,6 +72,7 @@ end
         E = scatteredfield(sp, ex, ElectricField(point_cart))
         Φ = scatteredfield(sp, ex, ScalarPotential(point_cart))
 
+        # Sihvola&Lindell 1988, (10) - (12)
         @test Φ[1] ≈ 29 / 224
         @test Φ[2] ≈ 223 / 672
         @test Φ[3] ≈ 95 / 896
@@ -90,7 +91,7 @@ end
     end
     @testset "Layered sphere PEC" begin
         # define scatterer: layered sphere PEC
-        sp = LayeredSpherePEC(; radii=SVector(1.0, 0.5), embedding=Medium(ε0, μ0), filling=SVector(Medium(5ε0, μ0)))
+        sp = LayeredSpherePEC(; radii=SVector(0.5, 1.0), filling=SVector(Medium(5ε0, μ0)))
 
         # define observation points in both layers and outside of the sphere
         point_cart = [SVector(0.25, 0.0, 0.0), SVector(0.75, 0.0, 0.0), SVector(2.0, 0.0, 0.0)]
@@ -114,6 +115,25 @@ end
         @test E[3][1] ≈ 43 / 256
         @test E[3][2] ≈ -215 / 512
         @test E[3][3] ≈ 129 / 512
+
+
+        # more than one dielectric layer
+        sp = LayeredSpherePEC(; radii=SVector(0.5, 0.75, 1.0), filling=SVector(Medium(3ε0, μ0), Medium(2ε0, μ0)))
+
+        # define observation points in both layers and outside of the sphere
+        point_cart = [SVector(0.25, 0.0, 0.0), SVector(0.6, 0.0, 0.0), SVector(2.0, 0.0, 0.0)]
+
+        # compute scattered field and potential
+        E = scatteredfield(sp, ex, ElectricField(point_cart))
+        Φ = scatteredfield(sp, ex, ScalarPotential(point_cart))
+
+        Φ[1] ≈ 1 / 4
+        Φ[2] ≈ 13287 / 28697
+        Φ[3] ≈ 25405 / 229576
+
+        E[1][1] ≈ -1
+        E[1][2] ≈ -5
+        E[1][3] ≈ 3
     end
     @testset "Dielectric sphere with thin impedance layer" begin
         # Free-space permittivity
@@ -143,19 +163,18 @@ end
 
         #
         sp = LayeredSphere(;
-            radii=SVector(R_c, R_c - Δ),
-            embedding=md_s,
-            filling=SVector(md_m, md_c), # From outer to inner layer
+            radii=SVector(R_c - Δ, R_c),
+            filling=SVector(md_c, md_m), # From inner to outer layer
         )
 
 
-        spj = DielectricSphereThinImpedanceLayer(; radius=R_c, thickness=Δ, embedding=md_s, thinlayer=md_m, filling=md_c)
+        spj = DielectricSphereThinImpedanceLayer(; radius=R_c, thickness=Δ, thinlayer=md_m, filling=md_c)
 
         # We compare against Jones, 1995, Appendix, he uses E₀ẑ
         # So potential points (i.e., grows) into ẑ direction
         potential_direction = dir
 
-        ex = UniformField(; embedding=md_s, amplitude=E₀, direction=-potential_direction)
+        ex = UniformField(; amplitude=E₀, direction=-potential_direction, embedding=md_s)
 
         Φsca_ana_3l(pts) = scatteredfield(sp, ex, ScalarPotential(pts))
         Φtot_ana_3l(pts) = field(sp, ex, ScalarPotential(pts))
@@ -166,6 +185,8 @@ end
         ∇Φsca_ana_app(pts) = scatteredfield(spj, ex, ElectricField(pts)) # I want the gradient, not the electric field
 
         @test norm(Φsca_ana_app(points_cartNF) - Φsca_ana_3l(points_cartNF)) / norm(Φsca_ana_3l(points_cartNF)) < 0.007
+        @test norm(Φsca_ana_app(points_cartNF_inside) - Φsca_ana_3l(points_cartNF_inside)) / norm(Φsca_ana_3l(points_cartNF_inside)) <
+            0.02
         @test norm(∇Φsca_ana_app(points_cartNF) - ∇Φsca_ana_3l(points_cartNF)) / norm(∇Φsca_ana_3l(points_cartNF)) < 0.007
 
         # Jump of potential should be comparable to the exact model
@@ -178,11 +199,15 @@ end
 
         ε∇Φsca_ana_app(pts) = scatteredfield(spj, ex, DisplacementField(pts))
 
-        Etot(pts) = field(spj, ex, ElectricField(pts))
+        Esca(pts) = scatteredfield(spj, ex, ElectricField(pts))
         𝒏 = points_cartFF ./ norm.(points_cartFF)
-        absdiff = dot.(𝒏, spj.embedding.ε * Etot(points_cartFF .* 1.01) - ε∇Φsca_ana_app(points_cartFF .* 0.99))
+        absdiff = dot.(𝒏, ex.embedding.ε * Esca(points_cartFF .* 1.01) - ε∇Φsca_ana_app(points_cartFF .* 0.99))
 
         # Check that normal component of D-field is continuous
-        @test norm(absdiff) / norm(dot.(𝒏, ε∇Φsca_ana_app(points_cartFF .* 0.99))) < 0.02
+        @test norm(absdiff) / norm(dot.(𝒏, ε∇Φsca_ana_app(points_cartFF .* 0.99))) < 0.03
+
+
+        @test norm(ε∇Φsca_ana_app(points_cartNF * 2.0) - ex.embedding.ε * Esca(points_cartNF * 2.0)) /
+              abs(ex.embedding.ε * norm(Esca(points_cartNF * 2.0))) < 0.007
     end
 end

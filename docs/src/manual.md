@@ -1,5 +1,5 @@
 
-# Manual
+# General Usage
 
 The basic building blocks are introduced in the following simple example; more details are provided afterwards:
 
@@ -8,7 +8,7 @@ The basic building blocks are introduced in the following simple example; more d
 
 
 
-```julia
+```@example introductory
 using SphericalScattering, StaticArrays
 
 # define excitation: plane wave travelling in positive z-direction with x-polarization
@@ -24,13 +24,14 @@ point_cart = [SVector(2.0, 2.0, 3.2)]
 E  = scatteredfield(sp, ex, ElectricField(point_cart))
 H  = scatteredfield(sp, ex, MagneticField(point_cart))
 FF = scatteredfield(sp, ex, FarField(point_cart))
+nothing # hide
 ```
 
 ---
 ## Defining Observation Points
 
 In order to define points the [StaticArrays](https://github.com/JuliaArrays/StaticArrays.jl) package has to be used.
-```julia
+```@example introductory
 using StaticArrays
 
 # defining a single point
@@ -38,6 +39,7 @@ point_cart = [SVector(2.0, 2.0, 3.2)]
 
 # defining multiple points (along a line)
 point_cart = [SVector(5.0, 5.0, z) for z in -2:0.2:2]
+nothing # hide
 ```
 
 !!! info
@@ -133,12 +135,29 @@ E  = field(sp, ex, ElectricField(point_cart))
 H  = field(sp, ex, MagneticField(point_cart))
 
 FF = field(sp, ex, FarField(point_cart))
-
 ```
 For the uniform field excitation, only the electric field as well as the scalar potential can be calculated:
 ```julia
 Φ = field(sp, ex, ScalarPotential(point_cart))
 ```
+
+
+---
+## Radar Cross Section
+
+To compute the bistatic [radar cross section (RCS)](@ref rcsPW), the function
+```julia
+σ = rcs(sp, ex, points_cart)
+```
+is provided. For the monostatic RCS, the function
+```julia
+σ = rcs(sp, ex)
+```
+is provided.
+
+!!! note
+    The RCS is (so far) only defined for a plane wave excitation.
+
 
 
 ---
@@ -159,3 +178,30 @@ F_cart = SphericalScattering.convertSpherical2Cartesian.(F_sph,  point_sph)
 
 F_sph  = SphericalScattering.convertCartesian2Spherical.(F_cart, point_sph)
 ```
+
+
+---
+## Plotting Fields
+
+To visualize far-fields and near-fields the functions
+
+```@docs
+sphericalGridPoints
+phiCutPoints
+thetaCutPoints
+```
+
+as well as the functions
+
+```julia
+plotff(F, points_sph; scale="log", normalize=true, type="abs")
+
+plotffcut(F, points; scale="log", normalize=true, format="polar")
+```
+
+are provided (after loading the [PlotlyJS](https://github.com/JuliaPlots/PlotlyJS.jl/tree/master) package). 
+For more details see the [visualization of fields](@ref visualize) examples.
+
+!!! warning
+    Issues have been reported with PlotlyJS if an installation via [Conda](https://docs.conda.io/en/latest/) is employed.
+    See, e.g., [this thread](https://discourse.julialang.org/t/missing-shared-library-file-when-pre-compiling/104575) for issues with Julia and Conda.

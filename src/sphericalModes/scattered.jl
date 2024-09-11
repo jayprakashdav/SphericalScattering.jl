@@ -6,8 +6,6 @@ Compute the electric field scattered by a dipole at some position and orientatio
 """
 function scatteredfield(sphere::PECSphere, excitation::SphericalMode, quantity::Field; parameter::Parameter=Parameter())
 
-    sphere.embedding == excitation.embedding || error("Excitation and sphere are not in the same medium.") # verify excitation and sphere are in the same medium
-
     T = typeof(excitation.frequency)
 
     F = zeros(SVector{3,Complex{T}}, size(quantity.locations))
@@ -19,9 +17,11 @@ function scatteredfield(sphere::PECSphere, excitation::SphericalMode, quantity::
     points = quantity.locations # translate(quantity.locations, -excitation.center)
     # rotate!(points, -excitation.rotation)
 
+    γ = scatterCoeff(sphere, excitation, excitation.n, wavenumber(excitation) * sphere.radius)
+
     # --- compute field in Cartesian representation
     for (ind, point) in enumerate(points)
-        F[ind] = scatteredfield(sphere, exc, point, fieldType; parameter=parameter)
+        F[ind] = γ * scatteredfield(sphere, exc, point, fieldType; parameter=parameter)
     end
 
     # --- rotate resulting field
@@ -54,16 +54,14 @@ function scatteredfield(sphere::PECSphere, excitation::SphericalMode, point, qua
         excitation.amplitude,
         excitation.m,
         excitation.n,
-        2,
+        3 - excitation.c, # 1 -> 2 and 2 -> 1
         excitation.center,
         excitation.orientation,
     )
 
-    # scatter coefficient
-    γ = scatterCoeff(sphere, excitation, excitation.n, ka)
     E = field(Escat, Q([point]))
 
-    return γ * E[1]
+    return E[1]
 end
 
 
@@ -75,7 +73,7 @@ Compute scattering coefficients for a spherical TE mode travelling towards the o
 """
 function scatterCoeff(sphere::PECSphere, excitation::SphericalModeTE, n::Int, ka)
     T = typeof(ka)
-    return -hankelh2(n + T(0.5), ka) / hankelh1(n + T(0.5), ka)
+    return -hankelh1(n + T(0.5), ka) / hankelh2(n + T(0.5), ka)
 end
 
 
@@ -92,8 +90,5 @@ function scatterCoeff(sphere::PECSphere, excitation::SphericalModeTM, n::Int, ka
     dH1 = (n + 1) * hankelh1(n + T(0.5), ka) - ka * hankelh1(n + T(1.5), ka)
     dH2 = (n + 1) * hankelh2(n + T(0.5), ka) - ka * hankelh2(n + T(1.5), ka)
 
-    #dH1 = (n + 1) * besselj(n+0.5, ka) - ka * besselj(n+1.5, ka)
-    #dH2 = (n + 1) * hankelh2(n+0.5, ka) - ka * hankelh2(n+1.5, ka)
-
-    return -dH2 / dH1
+    return -dH1 / dH2
 end

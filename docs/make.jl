@@ -12,7 +12,7 @@ makedocs(;
     ),
     pages=[
         "Introduction" => "index.md",
-        "Manual" => "manual.md",
+        "Manual" => Any["General Usage" => "manual.md", "Application Examples" => "application.md"],
         "Geometry" => Any["Coordinate System" => "coordinateSys.md", "Sphere Dimensions" => "scatterer.md"],
         "Excitations" => Any[
             "Plane Wave" => "planeWave.md",
@@ -27,4 +27,10 @@ makedocs(;
     ],
 )
 
-deploydocs(; repo="github.com/HoBeZwe/SphericalScattering.jl")
+deploydocs(;
+    repo="github.com/HoBeZwe/SphericalScattering.jl",
+    target="build",
+    push_preview=true,
+    forcepush=true,
+    versions=["stable" => "v^", "v#.#", "v0.5.0", "v0.4.0", "v0.3.0", "v0.2.0", "v0.1.2", "v0.1.1", "dev" => "dev"],
+)
